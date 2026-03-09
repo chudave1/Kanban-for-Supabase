@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kanban Board Demo</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <header>
+        <h1>Kanban Board</h1>
+        <p id="board-status" class="board-status" aria-live="polite"></p>
+    </header>
+    <main class="board">
+        <section class="column" data-column="To Do">
+            <h2>To Do</h2>
+        </section>
+        <section class="column" data-column="In Progress">
+            <h2>In Progress</h2>
+        </section>
+        <section class="column" data-column="Done">
+            <h2>Done</h2>
+        </section>
+    </main>
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <script src="js/kanban.js"></script>
+</body>
+</html>

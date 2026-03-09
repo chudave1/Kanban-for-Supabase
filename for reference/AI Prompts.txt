@@ -1,0 +1,8 @@
+I teach coding to kids. I have a student who wants write a "to do" list helper. 
+Thinking the first UI will be kanban style (personal kanban) board.
+We are using supabase for the database and have a starter schema. 
+We want to use github pages to host the app. 
+At some point security will be important as the student wants 
+to be able to assign tasks to friends. 
+Other more admin type UI's may be needed to create categories, add users "friends":, 
+etc
