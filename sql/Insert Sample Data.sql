@@ -79,13 +79,25 @@ FROM "Status";
 -- Sample Tasks
 DELETE FROM "Tasks";
 
+DELETE FROM "Tasks"
+WHERE id=6;
+
 INSERT INTO "Tasks"
 (created_at, last_updated, description, due_date, "comments", assigned_to, prerequisite_id, category_id, status_id)
 VALUES(now(), now(), 'Easter baskets for kids', TO_TIMESTAMP('2026/03/27 17:00:00', 'YYYY/MM/DD HH24:MI:SS'), null, 102, null, 102, 102);
 
 INSERT INTO "Tasks"
 (created_at, last_updated, description, due_date, "comments", assigned_to, prerequisite_id, category_id, status_id)
-VALUES(now(), now(), 'Mark lines on baseball field', TO_TIMESTAMP('2026/03/17 12:00:00', 'YYYY/MM/DD HH24:MI:SS'), null, 100, null, 101, 101);
+VALUES(now(), now(), 'Mark lines on baseball field', TO_TIMESTAMP('2026/03/17 12:00:00', 'YYYY/MM/DD HH24:MI:SS'), null, 100, null, 102, 101);
+
+INSERT INTO "Tasks"
+(created_at, last_updated, description, due_date, "comments", assigned_to, prerequisite_id, category_id, status_id)
+VALUES(now(), now(), 'Mow grass and rake sand', TO_TIMESTAMP('2026/03/17 12:00:00', 'YYYY/MM/DD HH24:MI:SS'), null, 100, 4, 101, 101);
+
+INSERT INTO "Tasks"
+(created_at, last_updated, description, due_date, "comments", assigned_to, prerequisite_id, category_id, status_id)
+VALUES(now(), now(), 'Science fair presentation', TO_TIMESTAMP('2026/03/10 14:00:00', 'YYYY/MM/DD HH24:MI:SS'), 'Request projector', 102, null, 100, 106);
+
 
 SELECT t.id, t.created_at, t.last_updated, t.description, t.due_date, t."comments", p.short_name, c."name", s."name" 
 FROM "Tasks" t
