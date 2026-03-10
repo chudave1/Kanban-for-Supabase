@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS public."Categories"
     name text  NOT NULL,
     description text,
     category_type text,
+    color_hex text,
     CONSTRAINT "Categories_pkey" PRIMARY KEY (id),
     CONSTRAINT "Categories_name_key" UNIQUE (name)
 )
