@@ -22,6 +22,33 @@
             <h2>Done</h2>
         </section>
     </main>
+    <div id="move-modal-backdrop" class="move-modal-backdrop" hidden>
+        <div class="move-modal" role="dialog" aria-modal="true" aria-labelledby="move-modal-title">
+            <h2 id="move-modal-title">Update Task for In Progress</h2>
+            <div id="move-modal-task-summary" class="move-modal-task-summary"></div>
+            <div class="move-modal-field">
+                <label for="move-comment">Comment</label>
+                <textarea id="move-comment" rows="3"></textarea>
+            </div>
+            <div class="move-modal-field">
+                <label for="move-assign-to">Assign To</label>
+                <select id="move-assign-to">
+                    <option value="">Select a person…</option>
+                </select>
+            </div>
+            <div class="move-modal-field">
+                <label for="move-status">New Status</label>
+                <select id="move-status">
+                    <option value="">Select a status…</option>
+                </select>
+            </div>
+            <p id="move-modal-error" class="move-modal-error" aria-live="polite"></p>
+            <div class="move-modal-actions">
+                <button type="button" id="move-cancel">Cancel</button>
+                <button type="button" id="move-save">Save</button>
+            </div>
+        </div>
+    </div>
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
     <script src="js/kanban.js"></script>
 </body>
