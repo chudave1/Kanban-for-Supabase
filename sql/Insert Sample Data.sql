@@ -17,6 +17,23 @@ INSERT INTO "Categories"
 (id, last_updated, "name", description, category_type)
 VALUES(103, now(), 'Home', 'Tasks for home', '');
 
+UPDATE "Categories"
+SET last_updated=now(), color_hex='#e3f2fd'
+WHERE id=100;
+
+UPDATE "Categories"
+SET last_updated=now(), color_hex='#fff3e0'
+WHERE id=101;
+
+UPDATE "Categories"
+SET last_updated=now(), color_hex='#f3e5f5'
+WHERE id=102;
+
+UPDATE "Categories"
+SET last_updated=now(), color_hex='#e8f5e9'
+WHERE id=103;
+
+
 
 SELECT id, last_updated, "name", description, category_type
 FROM "Categories";
