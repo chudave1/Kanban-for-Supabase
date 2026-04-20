@@ -9,6 +9,11 @@
 <body>
     <header>
         <h1>Kanban Board</h1>
+        <div class="header-toolbar">
+            <button type="button" id="add-task-open">Add Task</button>
+            <button type="button" id="change-task" disabled>Change Task</button>
+            <button type="button" id="delete-task" disabled>Delete Task</button>
+        </div>
         <p id="board-status" class="board-status" aria-live="polite"></p>
     </header>
     <main class="board">
@@ -49,7 +54,54 @@
             </div>
         </div>
     </div>
+    <div id="add-task-modal-backdrop" class="move-modal-backdrop" hidden>
+        <div class="move-modal" role="dialog" aria-modal="true" aria-labelledby="add-task-modal-title">
+            <h2 id="add-task-modal-title">Add Task</h2>
+            <div class="move-modal-field">
+                <label for="add-task-category">Category</label>
+                <select id="add-task-category">
+                    <option value="">Select a category…</option>
+                </select>
+            </div>
+            <div class="move-modal-field">
+                <label for="add-task-description">Description</label>
+                <textarea id="add-task-description" rows="3"></textarea>
+            </div>
+            <div class="move-modal-field">
+                <label for="add-task-due">Due Date</label>
+                <input type="date" id="add-task-due">
+            </div>
+            <div class="move-modal-field">
+                <label for="add-task-comment">Comment</label>
+                <textarea id="add-task-comment" rows="3"></textarea>
+            </div>
+            <div class="move-modal-field">
+                <label for="add-task-status">Status</label>
+                <select id="add-task-status">
+                    <option value="">Select a status…</option>
+                </select>
+            </div>
+            <div class="move-modal-field">
+                <label for="add-task-prerequisite">Prerequisite Task</label>
+                <select id="add-task-prerequisite">
+                    <option value="">None</option>
+                </select>
+            </div>
+            <div class="move-modal-field">
+                <label for="add-task-assign">Assigned To</label>
+                <select id="add-task-assign">
+                    <option value="">Select a person…</option>
+                </select>
+            </div>
+            <p id="add-task-modal-error" class="move-modal-error" aria-live="polite"></p>
+            <div class="move-modal-actions">
+                <button type="button" id="add-task-cancel">Cancel</button>
+                <button type="button" id="add-task-save">Save</button>
+            </div>
+        </div>
+    </div>
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <script src="js/secrets.js"></script>
     <script src="js/kanban.js"></script>
 </body>
 </html>

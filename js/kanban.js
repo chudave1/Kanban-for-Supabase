@@ -1,7 +1,6 @@
 (function () {
-    // TODO: Replace these placeholders with your actual Supabase project URL and anon key.
-    var SUPABASE_URL = 'https://lnzpyjgjclevbckwivnp.supabase.co';
-    var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxuenB5amdqY2xldmJja3dpdm5wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMwNzk3OTYsImV4cCI6MjA4ODY1NTc5Nn0.IFYlWVZTDEPVshavbApnNxI-BL6YT--FbDvB0LUZXlU';
+    var SUPABASE_URL = window.SUPABASE_URL;
+    var SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY;
     var KANBAN_VIEW = 'kanbanview';
 
     var categoryClassByName = {
@@ -18,6 +17,55 @@
     var currentDragFromColumnKey = null;
     var currentDragCard = null;
     var pendingMoveTargetColumnKey = null;
+
+    var boardColumnsByKey = null;
+
+    var cachedPeopleRows = null;
+    var cachedCategoryRows = null;
+    var cachedTodoStatusRows = null;
+    var cachedPrerequisiteCandidateRows = null;
+
+    var selectedCard = null;
+    var suppressCardClickAfterDrag = false;
+
+    var taskModalMode = 'add'; // 'add' | 'edit'
+    var editingTaskId = null;
+
+    function updateTaskActionButtons() {
+        var deleteBtn = document.getElementById('delete-task');
+        var changeBtn = document.getElementById('change-task');
+        var has = selectedCard && selectedCard.dataset && selectedCard.dataset.taskId;
+        if (deleteBtn) {
+            deleteBtn.disabled = !has;
+        }
+        if (changeBtn) {
+            changeBtn.disabled = !has;
+        }
+    }
+
+    function clearCardSelection() {
+        if (selectedCard) {
+            selectedCard.classList.remove('selected');
+            selectedCard = null;
+        }
+        updateTaskActionButtons();
+    }
+
+    function toggleCardSelection(card) {
+        if (!card || !card.dataset.taskId) {
+            return;
+        }
+        if (selectedCard === card) {
+            clearCardSelection();
+            return;
+        }
+        if (selectedCard) {
+            selectedCard.classList.remove('selected');
+        }
+        selectedCard = card;
+        selectedCard.classList.add('selected');
+        updateTaskActionButtons();
+    }
 
     function setColumns(colList) {
         columns = colList;
@@ -86,11 +134,21 @@
         card.addEventListener('dragend', function () {
             card.classList.remove('dragging');
             clearDragOver();
+            suppressCardClickAfterDrag = true;
             if (!pendingMoveTargetColumnKey) {
                 currentDragTaskId = null;
                 currentDragFromColumnKey = null;
                 currentDragCard = null;
             }
+        });
+
+        card.addEventListener('click', function (e) {
+            if (suppressCardClickAfterDrag) {
+                suppressCardClickAfterDrag = false;
+                return;
+            }
+            e.stopPropagation();
+            toggleCardSelection(card);
         });
 
         card.addEventListener('dragover', function (e) {
@@ -138,19 +196,27 @@
 
         backdrop.hidden = false;
 
-        loadPeopleOptions();
+        ensurePeopleRows(errorEl).then(function (ok) {
+            if (ok && assignSelect) {
+                populatePeopleSelect(assignSelect);
+            }
+        });
         loadStatusOptions();
     }
 
-    var peopleOptionsLoaded = false;
     var statusOptionsLoaded = false;
 
-    async function loadPeopleOptions() {
-        if (peopleOptionsLoaded) return;
+    async function ensurePeopleRows(errorEl) {
+        if (cachedPeopleRows) {
+            return true;
+        }
         var supabase = getSupabaseClient();
-        var selectEl = document.getElementById('move-assign-to');
-        var errorEl = document.getElementById('move-modal-error');
-        if (!supabase || !selectEl) return;
+        if (!supabase) {
+            if (errorEl) {
+                errorEl.textContent = 'Supabase client not available.';
+            }
+            return false;
+        }
 
         try {
             var result = await supabase
@@ -161,24 +227,345 @@
                 if (errorEl) {
                     errorEl.textContent = 'Error loading people: ' + (result.error.message || '');
                 }
-                return;
+                return false;
             }
 
-            var data = Array.isArray(result.data) ? result.data : [];
-            data.forEach(function (row) {
-                if (!row || row.id == null || !row.short_name) return;
-                var opt = document.createElement('option');
-                opt.value = String(row.id);
-                opt.textContent = row.short_name;
-                selectEl.appendChild(opt);
-            });
-
-            peopleOptionsLoaded = true;
+            cachedPeopleRows = Array.isArray(result.data) ? result.data : [];
+            return true;
         } catch (err) {
             if (errorEl) {
                 errorEl.textContent = 'Error loading people.';
             }
             console.error('Error loading people options:', err);
+            return false;
+        }
+    }
+
+    function populatePeopleSelect(selectEl) {
+        if (!selectEl) {
+            return;
+        }
+        selectEl.innerHTML = '';
+        var ph = document.createElement('option');
+        ph.value = '';
+        ph.textContent = 'Select a person…';
+        selectEl.appendChild(ph);
+        if (!cachedPeopleRows) {
+            return;
+        }
+        cachedPeopleRows.forEach(function (row) {
+            if (!row || row.id == null || !row.short_name) {
+                return;
+            }
+            var opt = document.createElement('option');
+            opt.value = String(row.id);
+            opt.textContent = row.short_name;
+            selectEl.appendChild(opt);
+        });
+    }
+
+    async function ensureCategoryRows(errorEl) {
+        if (cachedCategoryRows) {
+            return true;
+        }
+        var supabase = getSupabaseClient();
+        if (!supabase) {
+            if (errorEl) {
+                errorEl.textContent = 'Supabase client not available.';
+            }
+            return false;
+        }
+
+        try {
+            var result = await supabase
+                .from('Categories')
+                .select('id, name')
+                .order('name');
+
+            if (result.error) {
+                if (errorEl) {
+                    errorEl.textContent = 'Error loading categories: ' + (result.error.message || '');
+                }
+                return false;
+            }
+
+            cachedCategoryRows = Array.isArray(result.data) ? result.data : [];
+            return true;
+        } catch (err) {
+            if (errorEl) {
+                errorEl.textContent = 'Error loading categories.';
+            }
+            console.error('Error loading categories:', err);
+            return false;
+        }
+    }
+
+    function populateCategorySelect(selectEl) {
+        if (!selectEl) {
+            return;
+        }
+        selectEl.innerHTML = '';
+        var ph = document.createElement('option');
+        ph.value = '';
+        ph.textContent = 'Select a category…';
+        selectEl.appendChild(ph);
+        if (!cachedCategoryRows) {
+            return;
+        }
+        cachedCategoryRows.forEach(function (row) {
+            if (!row || row.id == null || !row.name) {
+                return;
+            }
+            var opt = document.createElement('option');
+            opt.value = String(row.id);
+            opt.textContent = row.name;
+            selectEl.appendChild(opt);
+        });
+    }
+
+    async function ensureTodoStatusRows(errorEl) {
+        if (cachedTodoStatusRows) {
+            return true;
+        }
+        var supabase = getSupabaseClient();
+        if (!supabase) {
+            if (errorEl) {
+                errorEl.textContent = 'Supabase client not available.';
+            }
+            return false;
+        }
+
+        try {
+            var result = await supabase
+                .from('Status')
+                .select('id, name')
+                .eq('status_type', 'To Do');
+
+            if (result.error) {
+                if (errorEl) {
+                    errorEl.textContent = 'Error loading statuses: ' + (result.error.message || '');
+                }
+                return false;
+            }
+
+            cachedTodoStatusRows = Array.isArray(result.data) ? result.data : [];
+            return true;
+        } catch (err) {
+            if (errorEl) {
+                errorEl.textContent = 'Error loading statuses.';
+            }
+            console.error('Error loading To Do statuses:', err);
+            return false;
+        }
+    }
+
+    function populateTodoStatusSelect(selectEl) {
+        if (!selectEl) {
+            return;
+        }
+        selectEl.innerHTML = '';
+        var ph = document.createElement('option');
+        ph.value = '';
+        ph.textContent = 'Select a status…';
+        selectEl.appendChild(ph);
+        if (!cachedTodoStatusRows) {
+            return;
+        }
+        cachedTodoStatusRows.forEach(function (row) {
+            if (!row || row.id == null || !row.name) {
+                return;
+            }
+            var opt = document.createElement('option');
+            opt.value = String(row.id);
+            opt.textContent = row.name;
+            selectEl.appendChild(opt);
+        });
+    }
+
+    async function ensurePrerequisiteCandidateRows(errorEl) {
+        if (cachedPrerequisiteCandidateRows) {
+            return true;
+        }
+        var supabase = getSupabaseClient();
+        if (!supabase) {
+            if (errorEl) {
+                errorEl.textContent = 'Supabase client not available.';
+            }
+            return false;
+        }
+
+        try {
+            var result = await supabase
+                .from(KANBAN_VIEW)
+                .select('task_id, description, which_column')
+                .in('which_column', ['To Do', 'In Progress'])
+                .order('description');
+
+            if (result.error) {
+                if (errorEl) {
+                    errorEl.textContent = 'Error loading prerequisite tasks: ' + (result.error.message || '');
+                }
+                return false;
+            }
+
+            cachedPrerequisiteCandidateRows = Array.isArray(result.data) ? result.data : [];
+            return true;
+        } catch (err) {
+            if (errorEl) {
+                errorEl.textContent = 'Error loading prerequisite tasks.';
+            }
+            console.error('Error loading prerequisite task options:', err);
+            return false;
+        }
+    }
+
+    function populatePrerequisiteSelect(selectEl, opts) {
+        if (!selectEl) {
+            return;
+        }
+        var excludeTaskId = opts && opts.excludeTaskId != null ? String(opts.excludeTaskId) : null;
+
+        selectEl.innerHTML = '';
+        var ph = document.createElement('option');
+        ph.value = '';
+        ph.textContent = 'None';
+        selectEl.appendChild(ph);
+
+        if (!cachedPrerequisiteCandidateRows) {
+            return;
+        }
+
+        cachedPrerequisiteCandidateRows.forEach(function (row) {
+            if (!row || row.task_id == null) {
+                return;
+            }
+            var id = String(row.task_id);
+            if (excludeTaskId && id === excludeTaskId) {
+                return;
+            }
+            var desc = row.description != null ? String(row.description) : '(no description)';
+            var which = row.which_column != null ? String(row.which_column) : '';
+            var opt = document.createElement('option');
+            opt.value = id;
+            opt.textContent = which ? desc + ' (' + which + ')' : desc;
+            selectEl.appendChild(opt);
+        });
+    }
+
+    async function openAddTaskModal(mode, taskId) {
+        var backdrop = document.getElementById('add-task-modal-backdrop');
+        if (!backdrop) {
+            return;
+        }
+
+        taskModalMode = mode === 'edit' ? 'edit' : 'add';
+        editingTaskId = taskModalMode === 'edit' ? taskId : null;
+
+        var titleEl = document.getElementById('add-task-modal-title');
+        var errorEl = document.getElementById('add-task-modal-error');
+        var categoryEl = document.getElementById('add-task-category');
+        var descEl = document.getElementById('add-task-description');
+        var dueEl = document.getElementById('add-task-due');
+        var commentEl = document.getElementById('add-task-comment');
+        var statusEl = document.getElementById('add-task-status');
+        var prerequisiteEl = document.getElementById('add-task-prerequisite');
+        var assignEl = document.getElementById('add-task-assign');
+
+        if (titleEl) {
+            titleEl.textContent = taskModalMode === 'edit' ? 'Change Task' : 'Add Task';
+        }
+        if (errorEl) {
+            errorEl.textContent = '';
+        }
+
+        backdrop.hidden = false;
+
+        if (!(await ensurePeopleRows(errorEl))) {
+            return;
+        }
+        populatePeopleSelect(assignEl);
+
+        if (!(await ensureCategoryRows(errorEl))) {
+            return;
+        }
+        populateCategorySelect(categoryEl);
+
+        if (!(await ensureTodoStatusRows(errorEl))) {
+            return;
+        }
+        populateTodoStatusSelect(statusEl);
+
+        if (!(await ensurePrerequisiteCandidateRows(errorEl))) {
+            return;
+        }
+        populatePrerequisiteSelect(prerequisiteEl, { excludeTaskId: taskModalMode === 'edit' ? editingTaskId : null });
+
+        if (taskModalMode === 'add') {
+            if (descEl) descEl.value = '';
+            if (dueEl) dueEl.value = '';
+            if (commentEl) commentEl.value = '';
+            if (assignEl) assignEl.value = '';
+            if (categoryEl) categoryEl.value = '';
+            if (statusEl) statusEl.value = '';
+            if (prerequisiteEl) prerequisiteEl.value = '';
+            return;
+        }
+
+        if (!editingTaskId) {
+            if (errorEl) {
+                errorEl.textContent = 'No task selected.';
+            }
+            return;
+        }
+
+        var supabase = getSupabaseClient();
+        if (!supabase) {
+            if (errorEl) {
+                errorEl.textContent = 'Supabase client not available.';
+            }
+            return;
+        }
+
+        try {
+            var result = await supabase
+                .from('Tasks')
+                .select('description, due_date, comments, category_id, status_id, assigned_to, prerequisite_id')
+                .eq('id', editingTaskId)
+                .single();
+
+            if (result.error) {
+                if (errorEl) {
+                    errorEl.textContent = 'Error loading task: ' + (result.error.message || '');
+                }
+                return;
+            }
+
+            var row = result.data || {};
+            if (descEl) descEl.value = row.description || '';
+            if (commentEl) commentEl.value = row.comments || '';
+            if (dueEl) {
+                dueEl.value = row.due_date ? String(row.due_date).substring(0, 10) : '';
+            }
+            if (categoryEl) categoryEl.value = row.category_id != null ? String(row.category_id) : '';
+            if (statusEl) statusEl.value = row.status_id != null ? String(row.status_id) : '';
+            if (assignEl) assignEl.value = row.assigned_to != null ? String(row.assigned_to) : '';
+            if (prerequisiteEl) prerequisiteEl.value = row.prerequisite_id != null ? String(row.prerequisite_id) : '';
+        } catch (err) {
+            console.error('Error loading task for edit:', err);
+            if (errorEl) {
+                errorEl.textContent = 'Unexpected error loading task.';
+            }
+        }
+    }
+
+    function closeAddTaskModal() {
+        var backdrop = document.getElementById('add-task-modal-backdrop');
+        var errorEl = document.getElementById('add-task-modal-error');
+        if (backdrop) {
+            backdrop.hidden = true;
+        }
+        if (errorEl) {
+            errorEl.textContent = '';
         }
     }
 
@@ -258,7 +645,10 @@
 
             var targetKey = column.getAttribute('data-column');
 
-            if (currentDragFromColumnKey === 'To Do' && targetKey === 'In Progress') {
+            if (
+                (currentDragFromColumnKey === 'To Do' && targetKey === 'In Progress') ||
+                (currentDragFromColumnKey === 'In Progress' && targetKey === 'Done')
+            ) {
                 openMoveToInProgressModal(currentDragTaskId, targetKey);
                 return;
             }
@@ -278,6 +668,9 @@
     }
 
     function renderKanbanBoard(rows, columnsByKey) {
+        selectedCard = null;
+        updateTaskActionButtons();
+
         columns.forEach(function (column) {
             var existingCards = column.querySelectorAll('.card');
             existingCards.forEach(function (card) { card.remove(); });
@@ -371,7 +764,61 @@
             attachColumnDnD(column);
         });
 
+        boardColumnsByKey = columnsByKey;
+
         loadCardsFromSupabase(columnsByKey);
+
+        var deleteTaskBtn = document.getElementById('delete-task');
+        if (deleteTaskBtn) {
+            deleteTaskBtn.addEventListener('click', async function () {
+                if (!selectedCard || !selectedCard.dataset.taskId) {
+                    return;
+                }
+                var taskId = selectedCard.dataset.taskId;
+                var titleNode = selectedCard.querySelector('h3');
+                var titleText = titleNode ? titleNode.textContent : 'this task';
+                if (!window.confirm('Are you sure you want to delete this task?\n\n' + titleText)) {
+                    return;
+                }
+
+                var supabase = getSupabaseClient();
+                if (!supabase) {
+                    setStatus('Supabase client not available.', true);
+                    return;
+                }
+
+                if (deleteTaskBtn) {
+                    deleteTaskBtn.disabled = true;
+                }
+
+                try {
+                    var result = await supabase
+                        .from('Tasks')
+                        .delete()
+                        .eq('id', taskId);
+
+                    if (result.error) {
+                        setStatus('Error deleting task: ' + (result.error.message || ''), true);
+                        if (deleteTaskBtn) {
+                            deleteTaskBtn.disabled = false;
+                        }
+                        updateTaskActionButtons();
+                    } else {
+                        clearCardSelection();
+                        if (boardColumnsByKey) {
+                            loadCardsFromSupabase(boardColumnsByKey);
+                        }
+                    }
+                } catch (err) {
+                    console.error('Error deleting task:', err);
+                    setStatus('Unexpected error deleting task.', true);
+                    if (deleteTaskBtn) {
+                        deleteTaskBtn.disabled = false;
+                    }
+                    updateTaskActionButtons();
+                }
+            });
+        }
 
         var saveBtn = document.getElementById('move-save');
         var cancelBtn = document.getElementById('move-cancel');
@@ -489,6 +936,169 @@
                     }
                     if (cancelBtn) {
                         cancelBtn.disabled = false;
+                    }
+                }
+            });
+        }
+
+        var addTaskOpen = document.getElementById('add-task-open');
+        var changeTaskBtn = document.getElementById('change-task');
+        var addTaskCancel = document.getElementById('add-task-cancel');
+        var addTaskSave = document.getElementById('add-task-save');
+        var addTaskBackdrop = document.getElementById('add-task-modal-backdrop');
+
+        if (addTaskOpen) {
+            addTaskOpen.addEventListener('click', function () {
+                openAddTaskModal('add');
+            });
+        }
+
+        if (changeTaskBtn) {
+            changeTaskBtn.addEventListener('click', function () {
+                if (!selectedCard || !selectedCard.dataset.taskId) {
+                    return;
+                }
+                openAddTaskModal('edit', selectedCard.dataset.taskId);
+            });
+        }
+
+        if (addTaskCancel) {
+            addTaskCancel.addEventListener('click', function () {
+                closeAddTaskModal();
+            });
+        }
+
+        if (addTaskBackdrop) {
+            addTaskBackdrop.addEventListener('click', function (e) {
+                if (e.target === addTaskBackdrop) {
+                    closeAddTaskModal();
+                }
+            });
+        }
+
+        if (addTaskSave) {
+            addTaskSave.addEventListener('click', async function () {
+                var errorEl = document.getElementById('add-task-modal-error');
+                var categoryEl = document.getElementById('add-task-category');
+                var descEl = document.getElementById('add-task-description');
+                var dueEl = document.getElementById('add-task-due');
+                var commentEl = document.getElementById('add-task-comment');
+                var statusEl = document.getElementById('add-task-status');
+                var prerequisiteEl = document.getElementById('add-task-prerequisite');
+                var assignEl = document.getElementById('add-task-assign');
+
+                var categoryId = categoryEl ? categoryEl.value : '';
+                var description = descEl ? descEl.value.trim() : '';
+                var dueRaw = dueEl ? dueEl.value : '';
+                var comment = commentEl ? commentEl.value.trim() : '';
+                var statusId = statusEl ? statusEl.value : '';
+                var prerequisiteTaskId = prerequisiteEl ? prerequisiteEl.value : '';
+                var assignedToId = assignEl ? assignEl.value : '';
+
+                if (errorEl) {
+                    errorEl.textContent = '';
+                }
+
+                if (!categoryId) {
+                    if (errorEl) {
+                        errorEl.textContent = 'Please select a category.';
+                    }
+                    return;
+                }
+                if (!description) {
+                    if (errorEl) {
+                        errorEl.textContent = 'Please enter a description.';
+                    }
+                    return;
+                }
+                if (!dueRaw) {
+                    if (errorEl) {
+                        errorEl.textContent = 'Please select a due date.';
+                    }
+                    return;
+                }
+                if (!statusId) {
+                    if (errorEl) {
+                        errorEl.textContent = 'Please select a status.';
+                    }
+                    return;
+                }
+
+                var saveBtn = addTaskSave;
+                if (saveBtn) {
+                    saveBtn.disabled = true;
+                }
+                if (addTaskCancel) {
+                    addTaskCancel.disabled = true;
+                }
+
+                try {
+                    var supabase = getSupabaseClient();
+                    if (!supabase) {
+                        if (errorEl) {
+                            errorEl.textContent = 'Supabase client not available.';
+                        }
+                    } else {
+                        var insertPayload = {
+                            description: description,
+                            due_date: dueRaw + 'T00:00:00',
+                            category_id: Number(categoryId),
+                            status_id: Number(statusId)
+                        };
+
+                        if (comment) {
+                            insertPayload.comments = comment;
+                        } else {
+                            insertPayload.comments = null;
+                        }
+
+                        if (assignedToId) {
+                            insertPayload.assigned_to = Number(assignedToId);
+                        } else {
+                            insertPayload.assigned_to = null;
+                        }
+
+                        if (prerequisiteTaskId) {
+                            insertPayload.prerequisite_id = Number(prerequisiteTaskId);
+                        } else {
+                            insertPayload.prerequisite_id = null;
+                        }
+
+                        var op = supabase.from('Tasks');
+                        var result;
+                        if (taskModalMode === 'edit' && editingTaskId) {
+                            result = await op
+                                .update(insertPayload)
+                                .eq('id', editingTaskId);
+                        } else {
+                            result = await op
+                                .insert(insertPayload);
+                        }
+
+                        if (result.error) {
+                            if (errorEl) {
+                                errorEl.textContent = 'Error saving task: ' + (result.error.message || '');
+                            }
+                        } else {
+                            closeAddTaskModal();
+                            taskModalMode = 'add';
+                            editingTaskId = null;
+                            if (boardColumnsByKey) {
+                                loadCardsFromSupabase(boardColumnsByKey);
+                            }
+                        }
+                    }
+                } catch (err) {
+                    console.error('Error inserting task:', err);
+                    if (errorEl) {
+                        errorEl.textContent = 'Unexpected error saving task.';
+                    }
+                } finally {
+                    if (saveBtn) {
+                        saveBtn.disabled = false;
+                    }
+                    if (addTaskCancel) {
+                        addTaskCancel.disabled = false;
                     }
                 }
             });

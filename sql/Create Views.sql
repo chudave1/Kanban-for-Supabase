@@ -7,7 +7,7 @@ SELECT s.status_type as which_column, t.id as task_id, t.last_updated as last_up
 	t.prerequisite_id as prerequisite_task,  p.short_name as assigned_to, c."name" as category, s."name" as status
 FROM "Tasks" t
 inner join "Categories" c on c.id = t.category_id 
-inner join "People" p on p.id = t.assigned_to 
+left outer join "People" p on p.id = t.assigned_to 
 inner join "Status" s on s.id = t.status_id
 ;
 
